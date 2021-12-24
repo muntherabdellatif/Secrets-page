@@ -8,8 +8,14 @@ require("dotenv").config();
 // const md5 = require("md5");
 
 // level 3 of socurity (hashing with salting)
-const bcrypt =require("bcrypt");
-const saltRounds= 10;
+// const bcrypt =require("bcrypt");
+// const saltRounds= 10;
+
+// level 4 (cookies)
+const session = require ("express-session"); // come first
+const passport =require("passport"); 
+const passportLocalMongoose = require("passport-local-mongoose");
+
 
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -23,7 +29,17 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.static("public"));
 
+// level 4 (cookies)
+app.use(session({
+    secret:"my secret code.",
+    resave:false ,
+    saveUninitialized:false 
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
 mongoose.connect("mongodb://localhost:27017/secretsDB", {useNewUrlParser: true});
+
 const userSchema = new mongoose.Schema({
     name : String,
     password: String
@@ -32,8 +48,16 @@ const userSchema = new mongoose.Schema({
 // level 1 of socurity (Encryption)
 // userSchema.plugin(mongooseEncryption,{secret:process.env.SECRET , encryptedFields:["password"]});
 
+// level 4 (cookies)
+userSchema.plugin(passportLocalMongoose);
+
 const User = mongoose.model("User", userSchema);
-  
+
+// level 4 (cookies)
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
 app.get("/",function(req,res){
     res.render("home");
 });
@@ -41,20 +65,38 @@ app.get("/",function(req,res){
 app.get("/register",function(req,res){
     res.render("register");
 })
-
+app.get("/secrets",function(req,res){
+    if(req.isAuthenticated()){
+        res.render("secrets");
+    }else{
+        res.redirect("/login");
+    }
+    
+});
+app.get("/logout",function(req,res){
+    req.logOut();
+    res.redirect("/");
+})
 app.post("/register",function(req,res){
 
-    // level 3 of socurity (hashing with salting)
-    bcrypt.hash(req.body.password,saltRounds,function(err,hash){
+    /*  level 1 of socurity
+    const newUser = new User ({
+        name : req.body.username,
+        password:req.body.password
+    });
+    newUser.save(function(err){
+        if(err){
+            res.send(err);
+        }else{
+            res.render("secrets");
+        }
+    })
+    */  
+
+    /* level 2 of socurity (hashing)
         const newUser = new User ({
             name : req.body.username,
-    
-            // level 2 of socurity (hashing)
-            // password : md5(req.body.password)
-    
-            // level 3 of socurity (hashing with salting)
-            password:hash
-    
+            password : md5(req.body.password)
         });
         newUser.save(function(err){
             if(err){
@@ -63,8 +105,37 @@ app.post("/register",function(req,res){
                 res.render("secrets");
             }
         })
-    });
-})
+    */
+
+    /* level 3 of socurity (hashing with salting)
+    bcrypt.hash(req.body.password,saltRounds,function(err,hash){
+        const newUser = new User ({
+            name : req.body.username,
+            password:hash
+        });
+        newUser.save(function(err){
+            if(err){
+                res.send(err);
+            }else{
+                res.render("secrets");
+            }
+        })
+     });
+     */
+
+     // level 4 (cookies)
+     User.register({username:req.body.username},req.body.password,function(err,user){
+         if(err){
+             console.log(err);
+             res.redirect("/register");
+         }else{
+             passport.authenticate("local")(req,res,function(){
+                 res.redirect("/secrets");
+             })
+         }
+     })
+
+});
 
 app.get("/login",function(req,res){
     res.render("login");
@@ -72,29 +143,65 @@ app.get("/login",function(req,res){
 
 app.post("/login",function(req,res){
     const userName = req.body.username;
-    
-    // level 2 of socurity (hashing)
-    // const password =md5(req.body.password);
 
+    /*  level 1 of socurity
+    const password =req.body.password;
     User.findOne({name:userName},function(err,user){
         if (err){
             res.send(err);
         }else{
             if (user){
+                if (user.password === password ) {
+                    res.render("secrets");
+                }
+            }
+        }
+    })
+    */
 
-                // level 3 of socurity (hashing with salting)
+    /* level 2 of socurity (hashing)
+    const password =md5(req.body.password);
+    User.findOne({name:userName},function(err,user){
+        if (err){
+            res.send(err);
+        }else{
+            if (user){
+                if (user.password === password ) {
+                    res.render("secrets");
+                }
+            }
+        }
+    })
+    */
+
+    /* level 3 of socurity (hashing with salting)
+    User.findOne({name:userName},function(err,user){
+        if (err){
+            res.send(err);
+        }else{
+            if (user){
                 bcrypt.compare(req.body.password,user.password,function(err,result){
                     if (result){
                         res.render("secrets");
                     }
                 })
-
-                // level 1,2
-                // if (user.password === password ) {
-                //     res.render("secrets");
-                // }
-
             }
+        }
+    })
+    */
+
+    // level 4 (cookies)
+    const newUser = new User ({
+        username:req.body.username ,
+        password:req.body.password 
+    });
+    req.logIn(newUser,function(err){
+        if(err){
+            console.log(err);
+        }else{
+            passport.authenticate('local')(req,res,function(){
+                res.redirect("/secrets");
+            });
         }
     })
 });
