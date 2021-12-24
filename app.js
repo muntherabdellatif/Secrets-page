@@ -42,7 +42,8 @@ mongoose.connect("mongodb://localhost:27017/secretsDB", {useNewUrlParser: true})
 
 const userSchema = new mongoose.Schema({
     name : String,
-    password: String
+    password: String,
+    secret:String
 });
 
 // level 1 of socurity (Encryption)
@@ -64,19 +65,51 @@ app.get("/",function(req,res){
 
 app.get("/register",function(req,res){
     res.render("register");
-})
+});
 app.get("/secrets",function(req,res){
-    if(req.isAuthenticated()){
-        res.render("secrets");
-    }else{
-        res.redirect("/login");
-    }
+    User.find({"secret":{$ne:null}},function(err,user){
+        if (err){
+            console.log(err);
+        }else {
+            if (user){
+                res.render("secrets",{usersWithSecrets:user});
+            }
+        }
+    });
+    // if(req.isAuthenticated()){
+    //     res.render("secrets");
+    // }else{
+    //     res.redirect("/login");
+    // }
     
 });
 app.get("/logout",function(req,res){
     req.logOut();
     res.redirect("/");
-})
+});
+app.get("/submit",function(req,res){
+    if(req.isAuthenticated()){
+        res.render("submit");
+    }else{
+        res.redirect("/login");
+    }
+});
+
+app.post("/submit",function(req,res){
+    const reqSecret = req.body.secret ;
+    User.findById(req.user._id,function(err,user){
+        if(err){
+            console.log(err);
+        }else{
+            if (user){
+                user.secret=reqSecret ;
+                user.save(function(){
+                    res.redirect("/secrets");
+                })
+            }
+        }
+    });
+});
 app.post("/register",function(req,res){
 
     /*  level 1 of socurity
@@ -142,7 +175,7 @@ app.get("/login",function(req,res){
 });
 
 app.post("/login",function(req,res){
-    const userName = req.body.username;
+    const userName = req.body;
 
     /*  level 1 of socurity
     const password =req.body.password;
